@@ -1,0 +1,20 @@
+# Environment & Secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Storage & Cloned Repositories
+storage/temp_repos/*
+!storage/temp_repos/.gitkeep
+storage/*.db
+
+# Linters & IDE
+.ruff_cache/
+.vscode/
+.idea/
