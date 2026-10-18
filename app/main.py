@@ -21,6 +21,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await async_engine.dispose()
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
