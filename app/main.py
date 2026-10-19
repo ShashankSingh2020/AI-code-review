@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.v1.routes.analyses import router as analyses_router
 from app.api.v1.routes.health import router as health_router
@@ -18,6 +19,13 @@ async def lifespan(app: FastAPI):
     # Automatically initialize tables in Neon PostgreSQL on startup
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Ensure new columns exist on already-created tables
+        await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS branch_name VARCHAR(128) DEFAULT 'main';"))
+        await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS raw_structural_metrics JSON DEFAULT '{}';"))
+        await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS raw_findings JSON DEFAULT '[]';"))
+        await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS raw_dependencies JSON DEFAULT '[]';"))
+        await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS ai_summary TEXT DEFAULT '';"))
 
     yield
 
@@ -44,5 +52,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Root-level health check for monitoring, load balancers, and test suites
+@app.get("/health", tags=["system"])
+async def root_health():
+    return {"status": "healthy"}
+
+# Versioned routes
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(analyses_router, prefix=settings.API_V1_STR)
