@@ -1,95 +1,62 @@
-import asyncio
 import os
+import re
 import shutil
-import stat
 import subprocess
+import uuid
 from pathlib import Path
-from typing import Tuple
-
 from app.core.config import settings
 
-
-class IngestionError(Exception):
-    """Raised when repository ingestion fails boundary or network checks."""
-    pass
-
-
-def _force_remove_readonly(func, path, exc_info):
-    """Windows-safe error handler for read-only Git objects."""
-    try:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    except Exception:
-        pass
-
-
-def _sync_clone(url_str: str, target_dir: Path, timeout_seconds: int):
-    cmd = [
-        "git",
-        "clone",
-        "--depth", "1",
-        "--single-branch",
-        url_str,
-        str(target_dir)
-    ]
-    res = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        timeout=timeout_seconds
-    )
-    if res.returncode != 0:
-        raise IngestionError(f"Git clone failed: {res.stderr.strip()}")
-
+GITHUB_URL_REGEX = re.compile(r"^https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(\.git)?$")
 
 class RepositoryIngestionService:
-    @staticmethod
-    def extract_repo_name(repo_url: str) -> str:
-        clean_url = str(repo_url).rstrip("/")
-        name = clean_url.split("/")[-1]
-        if name.endswith(".git"):
-            name = name[:-4]
-        return name
+    def __init__(self, base_storage_dir: str = "storage/cloned_repos"):
+        self.base_storage_dir = Path(base_storage_dir)
+        self.base_storage_dir.mkdir(parents=True, exist_ok=True)
+        self.timeout = getattr(settings, "PIPELINE_TIMEOUT_SECONDS", 120)
+        self.max_size_mb = getattr(settings, "MAX_REPO_SIZE_MB", 50)
 
-    @classmethod
-    async def clone_repository(cls, repo_url: str, job_id: str) -> Path:
-        target_dir = Path(settings.TEMP_STORAGE_PATH) / job_id
+    def validate_url(self, repo_url: str) -> bool:
+        return bool(GITHUB_URL_REGEX.match(repo_url.strip()))
 
-        if target_dir.exists():
-            shutil.rmtree(target_dir, onerror=_force_remove_readonly)
-        target_dir.mkdir(parents=True, exist_ok=True)
+    def _get_dir_size_mb(self, path: Path) -> float:
+        total = sum(f.stat().st_size for f in path.glob("**/*") if f.is_file())
+        return total / (1024 * 1024)
 
-        url_str = str(repo_url)
+    def clone_repository(self, repo_url: str, branch_name: str = "main") -> Path:
+        clean_url = repo_url.strip()
+        if not self.validate_url(clean_url):
+            raise ValueError("Invalid GitHub URL. Must be an HTTPS GitHub repository URL.")
+
+        unique_id = str(uuid.uuid4())[:8]
+        repo_name = clean_url.rstrip("/").split("/")[-1].replace(".git", "")
+        dest_dir = self.base_storage_dir / f"{repo_name}_{unique_id}"
+
+        cmd = [
+            "git", "clone",
+            "--depth", "1",
+            "--branch", branch_name,
+            "--single-branch",
+            clean_url,
+            str(dest_dir)
+        ]
 
         try:
-            await asyncio.to_thread(_sync_clone, url_str, target_dir, settings.CLONE_TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
-            cls.cleanup_repository(job_id)
-            raise IngestionError(f"Clone timed out after {settings.CLONE_TIMEOUT_SECONDS}s")
-        except IngestionError:
-            cls.cleanup_repository(job_id)
-            raise
-        except Exception as e:
-            cls.cleanup_repository(job_id)
-            raise IngestionError(f"Unexpected error during clone: {str(e)}")
+            subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=self.timeout)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            # Fallback: clone default branch if the custom branch fails
+            fallback_cmd = ["git", "clone", "--depth", "1", clean_url, str(dest_dir)]
+            subprocess.run(fallback_cmd, capture_output=True, text=True, check=True, timeout=self.timeout)
 
-        cls._enforce_size_limit(target_dir)
-        return target_dir
+        # Enforce size limits
+        size_mb = self._get_dir_size_mb(dest_dir)
+        if size_mb > self.max_size_mb:
+            self.cleanup(dest_dir)
+            raise ValueError(f"Repository size ({size_mb:.1f} MB) exceeds maximum allowed limit ({self.max_size_mb} MB).")
 
-    @classmethod
-    def _enforce_size_limit(cls, target_dir: Path) -> None:
-        total_size = sum(f.stat().st_size for f in target_dir.rglob("*") if f.is_file())
-        max_bytes = settings.MAX_REPO_SIZE_MB * 1024 * 1024
-        if total_size > max_bytes:
-            cls.cleanup_repository(target_dir.name)
-            raise IngestionError(
-                f"Repository size ({total_size / (1024*1024):.1f}MB) exceeds "
-                f"maximum limit of {settings.MAX_REPO_SIZE_MB}MB"
-            )
+        return dest_dir
 
-    @classmethod
-    def cleanup_repository(cls, job_id: str) -> None:
-        target_dir = Path(settings.TEMP_STORAGE_PATH) / job_id
-        if target_dir.exists():
-            shutil.rmtree(target_dir, onerror=_force_remove_readonly)
+    def cleanup(self, path: Path):
+        if path and Path(path).exists():
+            shutil.rmtree(path, ignore_errors=True)
+
+repo_ingestion_service = RepositoryIngestionService()

@@ -3,7 +3,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from radon.complexity import cc_visit
 
-from app.models.finding import FindingSeverity
+try:
+    from app.models.finding import FindingSeverity
+except ImportError:
+    class FindingSeverity:
+        LOW = "LOW"
+        MEDIUM = "MEDIUM"
+        HIGH = "HIGH"
+        CRITICAL = "CRITICAL"
 
 
 class ASTVisitor(ast.NodeVisitor):
@@ -13,13 +20,14 @@ class ASTVisitor(ast.NodeVisitor):
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler):
         if node.type is None:
+            severity = getattr(FindingSeverity, "HIGH", "HIGH")
             self.findings.append({
                 "file_path": self.rel_path,
                 "line": node.lineno,
                 "column": node.col_offset,
                 "rule_id": "AST-E001",
                 "analyzer": "ast",
-                "severity": FindingSeverity.HIGH,
+                "severity": severity.value if hasattr(severity, "value") else str(severity),
                 "title": "Bare Except Clause",
                 "message": "Catching generic Exception or bare except hides bugs and interrupts signals.",
                 "code_snippet": None
@@ -29,13 +37,14 @@ class ASTVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call):
         if isinstance(node.func, ast.Name):
             if node.func.id in {"eval", "exec"}:
+                severity = getattr(FindingSeverity, "CRITICAL", "HIGH")
                 self.findings.append({
                     "file_path": self.rel_path,
                     "line": node.lineno,
                     "column": node.col_offset,
                     "rule_id": "AST-S001",
                     "analyzer": "ast",
-                    "severity": FindingSeverity.CRITICAL,
+                    "severity": severity.value if hasattr(severity, "value") else str(severity),
                     "title": f"Dynamic Code Execution ({node.func.id})",
                     "message": f"Use of '{node.func.id}' allows arbitrary code execution.",
                     "code_snippet": None
@@ -44,12 +53,18 @@ class ASTVisitor(ast.NodeVisitor):
 
 
 class PythonASTAnalyzer:
+    def __init__(self, target_dir: Path = None):
+        self.target_dir = Path(target_dir) if target_dir else None
+
     @staticmethod
-    def analyze_file(file_path: Path, repo_path: Path) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def analyze_file(file_path: Path, repo_path: Path = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
-        try:
-            rel_path = str(file_path.relative_to(repo_path))
-        except ValueError:
+        if repo_path:
+            try:
+                rel_path = str(file_path.relative_to(repo_path))
+            except ValueError:
+                rel_path = str(file_path)
+        else:
             rel_path = str(file_path)
 
         try:
@@ -70,14 +85,15 @@ class PythonASTAnalyzer:
 
             for block in complexity_blocks:
                 if block.complexity > 10:
-                    severity = FindingSeverity.HIGH if block.complexity > 15 else FindingSeverity.MEDIUM
+                    raw_sev = FindingSeverity.HIGH if block.complexity > 15 else FindingSeverity.MEDIUM
+                    sev_str = raw_sev.value if hasattr(raw_sev, "value") else str(raw_sev)
                     findings.append({
                         "file_path": rel_path,
                         "line": block.lineno,
                         "column": block.col_offset,
                         "rule_id": "RADON-CC",
                         "analyzer": "radon",
-                        "severity": severity,
+                        "severity": sev_str,
                         "title": f"High Cyclomatic Complexity ({block.name})",
                         "message": f"Function/method '{block.name}' has cyclomatic complexity of {block.complexity} (threshold: 10).",
                         "code_snippet": None
@@ -93,3 +109,38 @@ class PythonASTAnalyzer:
         }
 
         return findings, stats
+
+    def analyze(self) -> Dict[str, Any]:
+        """Walks target_dir and returns aggregated metrics and findings."""
+        if not self.target_dir or not self.target_dir.exists():
+            return {
+                "file_count": 0,
+                "function_count": 0,
+                "class_count": 0,
+                "complexity_avg": 0.0,
+                "findings": []
+            }
+
+        py_files = list(self.target_dir.glob("**/*.py"))
+        total_functions = 0
+        total_classes = 0
+        all_complexities = []
+        all_findings = []
+
+        for py_file in py_files:
+            file_findings, stats = self.analyze_file(py_file, self.target_dir)
+            total_functions += stats.get("functions_count", 0)
+            total_classes += stats.get("classes_count", 0)
+            if stats.get("complexity_avg", 0) > 0:
+                all_complexities.append(stats["complexity_avg"])
+            all_findings.extend(file_findings)
+
+        overall_avg = sum(all_complexities) / len(all_complexities) if all_complexities else 0.0
+
+        return {
+            "file_count": len(py_files),
+            "function_count": total_functions,
+            "class_count": total_classes,
+            "complexity_avg": round(overall_avg, 2),
+            "findings": all_findings
+        }

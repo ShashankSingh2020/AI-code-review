@@ -1,51 +1,46 @@
 import ast
 from pathlib import Path
-from typing import Any, Dict, List
-
-
-class DependencyVisitor(ast.NodeVisitor):
-    def __init__(self, source_module: str):
-        self.source_module = source_module
-        self.edges: List[Dict[str, Any]] = []
-
-    def visit_Import(self, node: ast.Import):
-        for alias in node.names:
-            self.edges.append({
-                "source_node": self.source_module,
-                "target_node": alias.name,
-                "edge_type": "IMPORT",
-                "line_number": node.lineno
-            })
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom):
-        target = node.module if node.module else "."
-        for alias in node.names:
-            full_target = f"{target}.{alias.name}" if target != "." else alias.name
-            self.edges.append({
-                "source_node": self.source_module,
-                "target_node": full_target,
-                "edge_type": "IMPORT_FROM",
-                "line_number": node.lineno
-            })
-        self.generic_visit(node)
-
 
 class DependencyAnalyzer:
-    @staticmethod
-    def extract_dependencies(file_path: Path, repo_path: Path) -> List[Dict[str, Any]]:
-        try:
-            rel_path = file_path.relative_to(repo_path)
-            module_name = str(rel_path.with_suffix("")).replace("\\", ".").replace("/", ".")
-        except ValueError:
-            module_name = file_path.stem
+    def __init__(self, target_dir: Path = None):
+        self.target_dir = Path(target_dir) if target_dir else None
 
+    @staticmethod
+    def extract_dependencies(file_path: Path) -> list:
+        deps = []
         try:
-            code = file_path.read_text(encoding="utf-8", errors="replace")
-            tree = ast.parse(code, filename=str(file_path))
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                tree = ast.parse(f.read(), filename=str(file_path))
+            
+            module_name = file_path.stem
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        deps.append({
+                            "source_node": module_name,
+                            "target_node": alias.name,
+                            "edge_type": "import",
+                            "line_number": node.lineno
+                        })
+                elif isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    for alias in node.names:
+                        target = f"{mod}.{alias.name}" if mod else alias.name
+                        deps.append({
+                            "source_node": module_name,
+                            "target_node": target,
+                            "edge_type": "import_from",
+                            "line_number": node.lineno
+                        })
         except Exception:
+            pass
+        return deps
+
+    def analyze(self) -> list:
+        if not self.target_dir or not self.target_dir.exists():
             return []
 
-        visitor = DependencyVisitor(module_name)
-        visitor.visit(tree)
-        return visitor.edges
+        all_deps = []
+        for py_file in self.target_dir.glob("**/*.py"):
+            all_deps.extend(self.extract_dependencies(py_file))
+        return all_deps[:50]  # Cap at 50 to maintain clean graph rendering performance
