@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 
 class BaseAIProvider(ABC):
@@ -7,8 +7,8 @@ class BaseAIProvider(ABC):
     async def generate_code_review(
         self,
         repo_name: str,
-        metrics: Dict[str, Any],
-        findings: List[Dict[str, Any]]
+        metrics: dict[str, Any],
+        findings: list[dict[str, Any]]
     ) -> str:
         """Generate structured review commentary based on deterministic findings."""
         pass

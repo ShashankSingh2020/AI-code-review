@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.models.analysis import JobStatus
@@ -17,14 +18,14 @@ class AnalysisJobCreate(BaseModel):
 class FindingResponse(BaseModel):
     id: str
     file_path: str
-    line: Optional[int] = None
-    column: Optional[int] = None
+    line: int | None = None
+    column: int | None = None
     rule_id: str
     analyzer: str
     severity: FindingSeverity
     title: str
     message: str
-    code_snippet: Optional[str] = None
+    code_snippet: str | None = None
     created_at: datetime
 
     class Config:
@@ -36,7 +37,7 @@ class DependencyEdgeResponse(BaseModel):
     source_node: str
     target_node: str
     edge_type: str
-    line_number: Optional[int] = None
+    line_number: int | None = None
 
     class Config:
         from_attributes = True
@@ -48,9 +49,9 @@ class AnalysisJobStatusResponse(BaseModel):
     repo_name: str
     status: JobStatus
     current_stage: str
-    error_message: Optional[str] = None
-    metrics_summary: Dict[str, Any] = Field(default_factory=dict)
-    completed_at: Optional[datetime] = None
+    error_message: str | None = None
+    metrics_summary: dict[str, Any] = Field(default_factory=dict)
+    completed_at: datetime | None = None
     created_at: datetime
 
     class Config:
@@ -58,5 +59,5 @@ class AnalysisJobStatusResponse(BaseModel):
 
 
 class CompleteAnalysisReportResponse(AnalysisJobStatusResponse):
-    findings: List[FindingResponse] = Field(default_factory=list)
-    dependencies: List[DependencyEdgeResponse] = Field(default_factory=list)
+    findings: list[FindingResponse] = Field(default_factory=list)
+    dependencies: list[DependencyEdgeResponse] = Field(default_factory=list)

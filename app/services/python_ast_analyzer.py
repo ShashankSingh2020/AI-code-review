@@ -1,6 +1,7 @@
 import ast
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
+
 from radon.complexity import cc_visit
 
 try:
@@ -16,7 +17,7 @@ except ImportError:
 class ASTVisitor(ast.NodeVisitor):
     def __init__(self, rel_path: str):
         self.rel_path = rel_path
-        self.findings: List[Dict[str, Any]] = []
+        self.findings: list[dict[str, Any]] = []
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler):
         if node.type is None:
@@ -57,8 +58,8 @@ class PythonASTAnalyzer:
         self.target_dir = Path(target_dir) if target_dir else None
 
     @staticmethod
-    def analyze_file(file_path: Path, repo_path: Path = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        findings: List[Dict[str, Any]] = []
+    def analyze_file(file_path: Path, repo_path: Path = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
         if repo_path:
             try:
                 rel_path = str(file_path.relative_to(repo_path))
@@ -110,7 +111,7 @@ class PythonASTAnalyzer:
 
         return findings, stats
 
-    def analyze(self) -> Dict[str, Any]:
+    def analyze(self) -> dict[str, Any]:
         """Walks target_dir and returns aggregated metrics and findings."""
         if not self.target_dir or not self.target_dir.exists():
             return {

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List
+
 from app.core.config import settings
 
 IGNORED_DIRECTORIES = {
@@ -17,9 +17,9 @@ IGNORED_EXTENSIONS = {
 
 class FileClassifierService:
     @staticmethod
-    def classify_repository(repo_path: Path) -> Dict[str, List[Path]]:
-        python_files: List[Path] = []
-        skipped_files: List[Path] = []
+    def classify_repository(repo_path: Path) -> dict[str, list[Path]]:
+        python_files: list[Path] = []
+        skipped_files: list[Path] = []
         total_count = 0
 
         for path in repo_path.rglob("*"):

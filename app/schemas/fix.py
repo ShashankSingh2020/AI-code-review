@@ -1,12 +1,13 @@
+
 from pydantic import BaseModel
-from typing import Optional
+
 
 class FixRequest(BaseModel):
     rule_id: str
     message: str
     file_path: str
     line: int
-    code_context: Optional[str] = ""
+    code_context: str | None = ""
 
 class FixResponse(BaseModel):
     explanation: str

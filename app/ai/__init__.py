@@ -1,7 +1,7 @@
-from app.core.config import settings
 from app.ai.base import BaseAIProvider
-from app.ai.mock_provider import MockAIProvider
 from app.ai.gemini_provider import GeminiAIProvider
+from app.ai.mock_provider import MockAIProvider
+from app.core.config import settings
 
 
 def get_ai_provider() -> BaseAIProvider:

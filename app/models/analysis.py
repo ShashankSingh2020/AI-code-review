@@ -1,7 +1,8 @@
 import enum
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, Enum, String, Text, JSON
+from datetime import datetime
+
+from sqlalchemy import JSON, DateTime, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -24,14 +25,14 @@ class AnalysisJob(Base, TimestampMixin):
     status: Mapped[JobStatus] = mapped_column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
     current_stage: Mapped[str] = mapped_column(String(100), default="QUEUED", nullable=False)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
-    
+
     # Structural & aggregated metadata
     metrics_summary: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     raw_structural_metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=True)
     raw_findings: Mapped[list] = mapped_column(JSON, default=list, nullable=True)
     raw_dependencies: Mapped[list] = mapped_column(JSON, default=list, nullable=True)
     ai_summary: Mapped[str] = mapped_column(Text, default="", nullable=True)
-    
+
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Optional relationships to granular child tables (if configured)

@@ -1,0 +1,13 @@
+﻿target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",   # Line too long
+    "B008",   # FastAPI Depends() in parameter defaults
+    "B904",   # Within an except clause, raise ... from err
+    "UP042",  # Class inherits from both str and Enum
+]
+
+[lint.isort]
+combine-as-imports = true

@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+from typing import Any
+
 from google import genai
 from google.genai import types
 
@@ -14,8 +15,8 @@ class GeminiAIProvider(BaseAIProvider):
     async def generate_code_review(
         self,
         repo_name: str,
-        metrics: Dict[str, Any],
-        findings: List[Dict[str, Any]]
+        metrics: dict[str, Any],
+        findings: list[dict[str, Any]]
     ) -> str:
         prompt = build_review_prompt(repo_name, metrics, findings)
         response = await self.client.aio.models.generate_content(

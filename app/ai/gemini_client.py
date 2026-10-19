@@ -1,5 +1,6 @@
 from app.core.config import settings
 
+
 class GeminiReviewer:
     def __init__(self):
         self.api_key = getattr(settings, "GEMINI_API_KEY", None)
@@ -11,7 +12,7 @@ class GeminiReviewer:
                 import google.generativeai as genai
                 genai.configure(api_key=self.api_key)
                 model = genai.GenerativeModel(self.model_name)
-                
+
                 prompt = (
                     f"Perform an architectural and security code review synthesis based on these metrics:\n"
                     f"Structural Metrics: {structural_metrics}\n"
@@ -23,7 +24,7 @@ class GeminiReviewer:
                 response = await model.generate_content_async(prompt)
                 if response and response.text:
                     return response.text.strip()
-            except Exception as e:
+            except Exception:
                 pass
 
         # Offline / Fallback Review Generator

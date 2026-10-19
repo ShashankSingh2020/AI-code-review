@@ -1,9 +1,9 @@
 from app.schemas.analysis import (
     AnalysisJobCreate,
-    FindingResponse,
-    DependencyEdgeResponse,
     AnalysisJobStatusResponse,
     CompleteAnalysisReportResponse,
+    DependencyEdgeResponse,
+    FindingResponse,
 )
 
 __all__ = [

@@ -1,7 +1,8 @@
 ﻿import ast
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
+
 
 class DependencyAnalyzer:
     def __init__(self, target_dir: Path = None):
@@ -21,10 +22,10 @@ class DependencyAnalyzer:
         else:
             return "THIRD_PARTY"
 
-    def extract_dependencies(self, file_path: Path, local_modules: set) -> List[Dict[str, Any]]:
+    def extract_dependencies(self, file_path: Path, local_modules: set) -> list[dict[str, Any]]:
         deps = []
         try:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(file_path, encoding="utf-8", errors="ignore") as f:
                 tree = ast.parse(f.read(), filename=str(file_path))
 
             module_name = file_path.stem
@@ -57,7 +58,7 @@ class DependencyAnalyzer:
             pass
         return deps
 
-    def analyze(self) -> List[Dict[str, Any]]:
+    def analyze(self) -> list[dict[str, Any]]:
         if not self.target_dir or not self.target_dir.exists():
             return []
 

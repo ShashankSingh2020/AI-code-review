@@ -2,6 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
+
 class StaticAnalysisService:
     @staticmethod
     def run_ruff(target_dir: Path) -> list:

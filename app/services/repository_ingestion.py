@@ -1,9 +1,9 @@
-import os
 import re
 import shutil
 import subprocess
 import uuid
 from pathlib import Path
+
 from app.core.config import settings
 
 GITHUB_URL_REGEX = re.compile(r"^https://github\.com/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+(\.git)?$")

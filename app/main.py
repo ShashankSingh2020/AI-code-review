@@ -1,15 +1,16 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+import app.models
 from app.api.v1.routes.analyses import router as analyses_router
 from app.api.v1.routes.health import router as health_router
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import async_engine
-import app.models
 
 
 @asynccontextmanager
@@ -19,7 +20,7 @@ async def lifespan(app: FastAPI):
     # Automatically initialize tables in Neon PostgreSQL on startup
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
+
         # Ensure new columns exist on already-created tables
         await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS branch_name VARCHAR(128) DEFAULT 'main';"))
         await conn.execute(text("ALTER TABLE analysis_jobs ADD COLUMN IF NOT EXISTS raw_structural_metrics JSON DEFAULT '{}';"))

@@ -1,9 +1,8 @@
 ﻿import ast
 import logging
-from pathlib import Path
-from typing import Optional
-from app.schemas.fix import FixResponse
+
 from app.core.config import settings
+from app.schemas.fix import FixResponse
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class FixerService:
         message: str,
         file_path: str,
         line: int,
-        code_context: Optional[str] = None
+        code_context: str | None = None
     ) -> FixResponse:
         context_str = code_context.strip() if code_context else f"# Line {line} in {file_path}\n# Rule {rule_id}: {message}"
 
@@ -40,7 +39,7 @@ class FixerService:
             fallback_patch = context_str.replace("except:", "except Exception as exc:")
         elif rule_id == "AST-S001":
             fallback_explanation = "Dynamic execution via eval/exec allows arbitrary code injection. Replace with ast.literal_eval or safe dispatch tables."
-            fallback_patch = f"# REMEDIATION: Replace dynamic execution with safe parser\nimport ast\n# ast.literal_eval(...)"
+            fallback_patch = "# REMEDIATION: Replace dynamic execution with safe parser\nimport ast\n# ast.literal_eval(...)"
 
         # 2. Attempt LLM generation if configured
         if self.api_key:

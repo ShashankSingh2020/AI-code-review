@@ -1,10 +1,6 @@
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List
-
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from typing import Any
 
 from app.ai import get_ai_provider
 from app.db.session import AsyncSessionLocal
@@ -53,8 +49,8 @@ class PipelineOrchestrator:
                 job.current_stage = "AST_ANALYSIS"
                 await session.commit()
 
-                ast_findings: List[Dict[str, Any]] = []
-                complexities: List[float] = []
+                ast_findings: list[dict[str, Any]] = []
+                complexities: list[float] = []
                 func_count = 0
                 class_count = 0
 
@@ -70,7 +66,7 @@ class PipelineOrchestrator:
                 job.current_stage = "DEPENDENCY_ANALYSIS"
                 await session.commit()
 
-                edges_data: List[Dict[str, Any]] = []
+                edges_data: list[dict[str, Any]] = []
                 for pf in py_files:
                     edges = DependencyAnalyzer.extract_dependencies(pf, repo_path)
                     edges_data.extend(edges)
@@ -131,7 +127,7 @@ class PipelineOrchestrator:
                 job.metrics_summary = metrics_summary
                 job.status = JobStatus.COMPLETED
                 job.current_stage = "COMPLETED"
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(UTC)
                 await session.commit()
 
             except Exception as exc:

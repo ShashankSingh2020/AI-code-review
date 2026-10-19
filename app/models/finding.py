@@ -1,5 +1,6 @@
 import enum
 import uuid
+
 from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

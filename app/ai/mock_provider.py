@@ -1,4 +1,5 @@
-from typing import Any, Dict, List
+from typing import Any
+
 from app.ai.base import BaseAIProvider
 
 
@@ -6,8 +7,8 @@ class MockAIProvider(BaseAIProvider):
     async def generate_code_review(
         self,
         repo_name: str,
-        metrics: Dict[str, Any],
-        findings: List[Dict[str, Any]]
+        metrics: dict[str, Any],
+        findings: list[dict[str, Any]]
     ) -> str:
         total = len(findings)
         critical_high = [f for f in findings if f.get("severity") in ("CRITICAL", "HIGH")]
