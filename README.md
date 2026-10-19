@@ -15,13 +15,13 @@ Paste a public GitHub repository URL and get an automated code-health report: **
 
 | Feature | Details |
 |---|---|
-| **Safe repo ingestion** | Only `https://github.com/<owner>/<repo>` URLs are accepted (regex-validated). Cloned with `git clone --depth 1 --single-branch --branch <branch>`, falling back to the default branch if the requested one doesn't exist. Temp clone is deleted in a `finally` block. |
+| **Safe repo ingestion** | Only `https://github.com/<owner>/<repo>` URLs are accepted (regex-validated). Cloned with `git clone --depth 1 --single-branch --branch <branch>`, falling back to the default branch if the requested one doesn't exist. Enforces a clone timeout and a repository-size cap (`MAX_REPO_SIZE_MB`); the temp clone is deleted in a `finally` block. |
 | **Ruff + security rules** | Runs `ruff check --select E,F,S,B` (pycodestyle errors, Pyflakes, Bandit-style security, bugbear). Rule codes map to severity: `S*` → HIGH, `E*` → MEDIUM, others → LOW. |
 | **AST & complexity analysis** | Python `ast` visitors flag bare `except:` and `eval`/`exec`; Radon reports per-function cyclomatic complexity (> 10 flagged, > 15 HIGH). |
-| **Dependency graph** | `import` / `from … import` edges per module, rendered as an interactive graph with React Flow. |
-| **AI review synthesis** | Gemini turns metrics + findings into a concise executive summary. If no API key is set (or the call fails) an offline summary is generated, so the app always works. |
+| **Dependency graph** | `import` / `from … import` edges per module (capped at 50 edges for a readable graph), rendered interactively with React Flow. |
+| **AI review synthesis** | Gemini turns metrics + merged findings into a concise executive summary. If no API key is set (or the call fails) an offline summary is generated, so the app always works. |
 | **AI fix suggestions** | Click any finding for a short explanation and a suggested patch (`POST /analyses/fix`), also with an offline fallback. |
-| **Scan history** | Persisted scans (latest 20) in a history drawer; reopen any past report. |
+| **Persistent scan history** | Every scan is stored in PostgreSQL (`analysis_jobs`); the history drawer lists the latest 20 and reopens any past report. |
 | **Health probes** | `/health` and `/health/ready` (checks DB connectivity). |
 
 ---
@@ -135,8 +135,9 @@ Copy `.env.example` → `.env`. **Never commit `.env`** (it's in `.gitignore`).
 | `APP_ENV` / `APP_DEBUG` | `development` / `true` | Environment name; `APP_DEBUG` enables SQL echo. |
 | `API_V1_STR` | `/api/v1` | API prefix. |
 | `PROJECT_NAME` | `AI Code Review + GitHub Repository Analyst` | API title. |
-| `MAX_REPO_SIZE_MB`, `MAX_REPO_FILES`, `MAX_SINGLE_FILE_BYTES` | `50`, `500`, `512000` | Repository size/file limits (used by the file classifier / size checks). |
-| `CLONE_TIMEOUT_SECONDS`, `PIPELINE_TIMEOUT_SECONDS` | `45`, `300` | Timeout settings. |
+| `MAX_REPO_SIZE_MB` | `50` | Repositories larger than this are rejected after cloning. |
+| `PIPELINE_TIMEOUT_SECONDS` | `300` | Timeout applied to `git clone`. |
+| `MAX_REPO_FILES`, `MAX_SINGLE_FILE_BYTES`, `CLONE_TIMEOUT_SECONDS` | `500`, `512000`, `45` | Defined for the job-based orchestrator; not yet used by the `/analyses` endpoint. |
 | `TEMP_STORAGE_PATH` | `./storage/temp_repos` | Temporary clone directory. |
 | `LLM_PROVIDER` | `mock` | `mock` or `gemini`. |
 | `GEMINI_API_KEY` | – | Enables real Gemini reviews and fixes. |
@@ -163,7 +164,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/analyses \
   -d '{"repo_url": "https://github.com/octocat/Hello-World.git", "branch_name": "main"}'
 ```
 
-Invalid URLs (non-GitHub, non-HTTPS) return `400`. Report shape:
+Invalid URLs (non-GitHub, non-HTTPS) return `400`. `findings` is one merged list (Ruff + AST + Radon; each item has a `rule_id` and `severity`). Example report (shape; counts from a local run on `pallets/click`):
 
 ```json
 {
@@ -171,7 +172,8 @@ Invalid URLs (non-GitHub, non-HTTPS) return `400`. Report shape:
   "repo_url": "https://github.com/octocat/Hello-World.git",
   "branch_name": "main",
   "status": "COMPLETED",
-  "structural_metrics": { "file_count": 14, "function_count": 82 },
+  "structural_metrics": { "file_count": 91, "function_count": 1305, "class_count": 121,
+                          "complexity_avg": 2.93 },
   "findings": [
     { "rule_id": "S110", "severity": "HIGH", "file_path": "core/processor.py",
       "line": 42, "title": "…", "message": "…" }
@@ -207,7 +209,7 @@ Fix request/response:
 
 - Repository code is **only parsed, never executed or imported**.
 - Strict URL allow-list: HTTPS GitHub repositories only; branch is passed as a separate argument (no shell execution).
-- Shallow, single-branch clone; temporary clone removed after every run.
+- Shallow, single-branch clone with a timeout and a repo-size cap; temporary clone removed after every run.
 - Secrets come from environment variables; `.env` is git-ignored and `.env.example` contains placeholders only.
 - CORS restricted to the local Vite dev origins.
 
@@ -215,17 +217,28 @@ Fix request/response:
 
 ## 📌 Project Status
 
-> ⚠️ Keep this section honest and update it as you ship.
+**Tested end-to-end** (API + SQL persistence, run locally against a real public repository, `pallets/click`: 91 files, 1,305 functions, 121 classes, ~1,500 findings):
 
-- ✅ **Working building blocks:** URL validation + shallow clone, Ruff runner, AST/Radon analyzers, dependency extraction, Gemini/offline AI layer, fix suggestions, health checks, React dashboard.
-- 🚧 **Being finalised:** aligning the `/analyses` route layer with the analyzer classes and the database models (job storage, history and report retrieval), plus enforcing the size/time limits during clone.
+- ✅ URL validation (non-GitHub URLs → `400`) and branch-aware shallow clone with timeout + size cap
+- ✅ Ruff (`E,F,S,B`) + AST + Radon findings merged into a single list
+- ✅ Dependency graph extraction (capped at 50 edges for readability)
+- ✅ Report persisted to the database; `GET /analyses` and `GET /analyses/{job_id}` return it
+- ✅ AI summary and fix suggestions (Gemini when a key is set, offline fallback otherwise)
+- ✅ Health probes and React dashboard
+
+**Known limitations**
+- Python repositories only; scans run synchronously inside the request (large repos can take a while).
+- The dependency graph lists raw import edges and does not yet separate internal modules from third-party packages.
+- `MAX_REPO_FILES`, `MAX_SINGLE_FILE_BYTES` and `CLONE_TIMEOUT_SECONDS` are reserved for the job-based `orchestrator.py` pipeline and are not used by the `/analyses` endpoint yet.
+- Two Gemini SDKs are listed in `requirements.txt` (`google-generativeai` and `google-genai`); they will be unified later.
+- No automated tests or CI yet.
 
 ---
 
 ## 🗺 Roadmap
 
 - [ ] End-to-end tests (pytest) and GitHub Actions CI
-- [ ] Enforce clone timeout and repo-size limits; add overall pipeline timeout
+- [ ] Unify on a single Gemini SDK
 - [ ] Run the pipeline as a background job with live stage updates
 - [ ] Resolve internal vs. third-party imports; detect circular dependencies
 - [ ] Docker / docker-compose and a live deployment
